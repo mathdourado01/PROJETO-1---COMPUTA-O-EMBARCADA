@@ -21,6 +21,7 @@ int posicaoAtual = 0;
 // Variável de controle
 bool jogoIniciado = false; 
 bool botaoPressionado = false; 
+bool jogoEncerrado = false;
 
 void setup() {
 
@@ -42,18 +43,22 @@ void loop() {
   if (digitalRead(botaoStart) == LOW && !botaoPressionado) {
     delay(50);
     if (digitalRead(botaoStart) == LOW) {
-      iniciarJogo();
+      if (!jogoIniciado) {
+        iniciarJogo(); 
+      } else {
+        encerrarJogo(); 
+      }
       botaoPressionado = true; // Marca o botão como pressionado
     }
   }
 
-  // Verifica se o botão não esta mais apertado
+  
   if (digitalRead(botaoStart) == HIGH) {
     botaoPressionado = false; 
   }
 
-  // Se o jogo estiver iniciado, verificar a entrada do jogador
-  if (jogoIniciado) {
+  
+  if (jogoIniciado && !jogoEncerrado) {
     verificarEntradaJogador();
   }
 }
@@ -61,7 +66,7 @@ void loop() {
 void iniciarJogo() {
   jogoIniciado = true;
   posicaoAtual = 0;
-
+  jogoEncerrado = false;
 
   for (int i = 0; i < 10; i++) {
     sequencia[i] = random(0, 2); // 0 para LED1, 1 para LED2
@@ -81,7 +86,7 @@ void iniciarJogo() {
     delay(500);
     digitalWrite(led1, LOW);
     digitalWrite(led2, LOW);
-    delay(500); // Pausa entre os flashes
+    delay(1000); // Pausa entre os flashes
   }
 
   lcd_1.clear();
@@ -93,23 +98,39 @@ void iniciarJogo() {
 void verificarEntradaJogador() {
   if (digitalRead(botao1) == LOW) { // Jogador pressiona botão 1 (LED1)
     respostaJogador[posicaoAtual] = 0;
+    mostrarTentativa(0); 
     registrarResposta();
   } else if (digitalRead(botao2) == LOW) { // Jogador pressiona botão 2 (LED2)
     respostaJogador[posicaoAtual] = 1;
+    mostrarTentativa(1);
     registrarResposta();
   }
 }
 
-
+void mostrarTentativa(int ledPressionado) {
+  lcd_1.clear();
+  lcd_1.setCursor(0, 0);
+  lcd_1.print("Tentativa: ");
+  lcd_1.print(posicaoAtual + 1);
+  
+  if (respostaJogador[posicaoAtual] == sequencia[posicaoAtual]) {
+    lcd_1.setCursor(0, 1);
+    lcd_1.print("Correto!");
+  } else {
+    lcd_1.setCursor(0, 1);
+    lcd_1.print("Errado!");
+    delay(1000);
+    encerrarJogo();
+  }
+  delay(500);
+}
 void registrarResposta() {
   delay(200); 
   posicaoAtual++;
-  
-  // Verifica se o jogador completou todas as respostas
   if (posicaoAtual == 10) {
     verificarSequencia();
   }
-}
+  }
 
 void verificarSequencia() {
   bool acertou = true;
@@ -125,20 +146,16 @@ void verificarSequencia() {
     lcd_1.setCursor(0, 0);
     lcd_1.print("Voce Ganhou!");
     for (int i = 0; i < 3; i++) {
-      digitalWrite(buzzer, HIGH);
-      delay(100);
-      digitalWrite(buzzer, LOW);
-      delay(100);
+      tone(buzzer, 700, 200); 
+      delay(300);
     }
   } else {
     lcd_1.clear();
     lcd_1.setCursor(0, 0);
     lcd_1.print("Voce Perdeu!");
     for (int i = 0; i < 3; i++) {
-      digitalWrite(buzzer, HIGH);
-      delay(300);
-      digitalWrite(buzzer, LOW);
-      delay(300);
+      tone(buzzer, 400, 300); 
+      delay(400);
     }
   }
 
@@ -146,4 +163,20 @@ void verificarSequencia() {
   lcd_1.clear();
   lcd_1.print("Press Start");
   jogoIniciado = false;
+}
+void encerrarJogo() {
+  jogoIniciado = false;
+  jogoEncerrado = true;
+  lcd_1.clear();
+  lcd_1.setCursor(0, 0);
+  lcd_1.print("Jogo Encerrado!");
+
+  for (int i = 0; i < 3; i++) {
+    digitalWrite(buzzer, HIGH);
+    delay(200);
+    digitalWrite(buzzer, LOW);
+    delay(200);
+  }
+  lcd_1.clear();
+  lcd_1.print("Press Start");
 }
