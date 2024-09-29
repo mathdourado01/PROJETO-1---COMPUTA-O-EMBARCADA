@@ -5,28 +5,37 @@ LiquidCrystal lcd_1(12, 11, 7, 6, 5, 4);
 // Definindo os LEDs e Botões
 const int led1 = 9;
 const int led2 = 10;
-const int botao1 = 2; // Botão para SIM (representa o LED1)
-const int botao2 = 3; // Botão para NAO (representa o LED2)
-const int botaoStart = 8; // Botão para Iniciar/Desistir
+const int botao1 = 3; // Botão para SIM (representa o LED1)
+const int botao2 = 8; // Botão para NAO (representa o LED2)
+const int botaoStart = 2; // Botão para Iniciar/Desistir, agora no pino 2
 
 // Buzzer
 const int buzzer = 13;
 
 // Perguntas e Respostas
-const int qtdePerguntas = 10; 
+const int qtdePerguntas = 10;
+const int qtdePerguntasFinais = 3;
+
 String perguntas[qtdePerguntas] = {
-  "Palmeiras tem mundial ?", // NAO
-  "CC tem 10 semestres ?", // NAO
-  "A Fei tem 10 cursos ?", // NAO
-  "FEI é melhor que MAUA ?", // SIM
-  "Futebol melhor que volei ?", // SIM
-  "Libertadores > Champions ? ", // NAO
-  "Lebron eh Goat ?", // SIM
-  "Messi eh Goat ?", // SIM
-  "Mbappe 2022 melhor prime ?", // SIM
-  "Palmeiras > Cassio ?" // NAO
+  "Palmeiras tem mundial?", // NAO
+  "CC tem 10 semestres?", // NAO
+  "A Fei tem 10 cursos?", // NAO
+  "FEI eh melhor que MAUA?", // SIM
+  "Futebol melhor que volei?", // SIM
+  "Libertadores > Champions?", // NAO
+  "Teve copa em 2002?", // SIM
+  "Brasil eh penta?", // SIM
+  "Mbappe 2022 melhor prime?", // SIM
+  "Palmeiras > Cassio?" // NAO
 };
 bool respostas[qtdePerguntas] = {false, false, false, true, true, false, true, true, true, false};
+
+String perguntasFinais[qtdePerguntasFinais] = {
+  "CR7 maior atleta da historia?", // SIM
+  "Usain Bolt > Gatlin?", // NAO
+  "Einstein > Tesla?" // NAO
+};
+bool respostasFinais[qtdePerguntasFinais] = {true, false, false};
 
 // Sequência do jogo
 int sequencia[10]; 
@@ -37,60 +46,81 @@ int posicaoAtual = 0;
 int perguntasSelecionadas[5];
 int perguntaAtual = 0; 
 bool jogoMemoria = false;
-bool botaoPressionado = false;
 bool jogoEncerrado = false;
 bool fasePerguntas = false; 
+bool perguntaPulada = false;
+
+unsigned long tempoInicioPergunta = 0;
+const unsigned long tempoLimite = 10000; // Tempo limite para responder (10 segundos)
+bool tempoAcabando = false;
+volatile bool iniciarMemoria = false; // Variável para iniciar o jogo da memória
 
 void setup() {
   pinMode(led1, OUTPUT);
   pinMode(led2, OUTPUT);
   pinMode(botao1, INPUT_PULLUP); 
   pinMode(botao2, INPUT_PULLUP); 
-  pinMode(botaoStart, INPUT_PULLUP);
+  pinMode(botaoStart, INPUT_PULLUP); 
   pinMode(buzzer, OUTPUT);
   
   lcd_1.begin(16, 2);
-  lcd_1.setCursor(0, 0);
-  lcd_1.print("Seja bem vindo");
-  lcd_1.setCursor(0, 1);
-  lcd_1.print("Pressione inicia");
+  mensagemInicial();
 
   randomSeed(analogRead(0));
+  
+  attachInterrupt(digitalPinToInterrupt(botaoStart), startButtonISR, FALLING);
 }
 
 void loop() {
-  // Verificar se o botão Start foi pressionado
-  if (digitalRead(botaoStart) == LOW && !botaoPressionado) {
-    delay(50);
-    if (digitalRead(botaoStart) == LOW) {
-      if (!jogoMemoria) {
-        iniciarJogo(); 
-      } else {
-        encerrarJogo(); 
-      }
-      botaoPressionado = true; // Marca o botão como pressionado
-    }
-  }
-
-  if (digitalRead(botaoStart) == HIGH) {
-    botaoPressionado = false; 
+  if (iniciarMemoria && !jogoEncerrado) {
+    iniciarMemoria = false;
+    iniciarJogo();
   }
 
   if (jogoMemoria && !jogoEncerrado) {
     if (!fasePerguntas) {
       verificarEntradaJogador(); 
     } else {
+      verificarTempoPergunta(); 
       verificarRespostaPergunta();
     }
   }
 }
 
+void startButtonISR() {
+  if (!jogoMemoria && !jogoEncerrado) {
+    iniciarMemoria = true; 
+  } else if (jogoMemoria) {
+    encerrarJogoISR();
+  }
+}
+
+
+void encerrarJogoISR() {
+  jogoEncerrado = true;
+  lcd_1.clear();
+  lcd_1.setCursor(0, 0);
+  lcd_1.print("Jogo Encerrado!");
+
+  
+  digitalWrite(led1, LOW);
+  digitalWrite(led2, LOW);
+
+  for (int i = 0; i < 3; i++) {
+    tone(buzzer, 500, 200); 
+    delay(300);
+  }
+
+  delay(2000);
+  reiniciarJogo(); // 
+}
 void iniciarJogo() {
   jogoMemoria = true;
   posicaoAtual = 0;
   fasePerguntas = false; 
   perguntaAtual = 0;
   jogoEncerrado = false;
+  perguntaPulada = false;
   
   // Seleciona perguntas aleatórias diferentes
   for (int i = 0; i < 5; i++) {
@@ -165,10 +195,11 @@ void mostrarTentativa(int ledIndicado) {
     lcd_1.setCursor(0, 1);
     lcd_1.print("Errado!");
     delay(1000);
-    encerrarJogo();
+    encerrarJogoISR();
   }
   delay(500);
 }
+
 
 void registrarResposta() {
   delay(200); 
@@ -177,7 +208,13 @@ void registrarResposta() {
     verificarSequencia();
   }
 }
-
+void registrarResposta() {
+  delay(200); 
+  posicaoAtual++;
+  if (posicaoAtual == 10) {
+    verificarSequencia();
+  }
+}
 void verificarSequencia() {
   bool acertou = true;
   for (int i = 0; i < 10; i++) {
@@ -195,6 +232,13 @@ void verificarSequencia() {
       tone(buzzer, 700, 200); 
       delay(300);
     }
+    delay(3000);
+    lcd_1.clear();
+    lcd_1.setCursor(0, 0);
+    lcd_1.print("Jogo de perguntas");
+    lcd_1.setCursor(0, 1);
+    lcd_1.print("iniciado!");
+    delay(2000);
     iniciarPerguntas();
   } else {
     lcd_1.clear();
@@ -206,7 +250,6 @@ void verificarSequencia() {
     }
   }
 }
-
 void iniciarPerguntas() {
   fasePerguntas = true;
   perguntaAtual = 0;
@@ -226,6 +269,8 @@ void exibirPergunta() {
     lcd_1.print(pergunta.substring(i, i + 16)); // Mostra parte da pergunta
     delay(500); 
   }
+  tempoInicioPergunta = millis(); 
+  tempoAcabando = false;
 }
 
 void verificarRespostaPergunta() {
@@ -245,6 +290,42 @@ void verificarRespostaPergunta() {
     }
   }
 }
+void verificarTempoPergunta() {
+  unsigned long tempoAtual = millis();
+  unsigned long tempoRestante = tempoLimite - (tempoAtual - tempoInicioPergunta);
+
+  if (tempoRestante <= 3000 && !tempoAcabando) {
+    tone(buzzer, 1000, 200); 
+    tempoAcabando = true; 
+  }
+
+  if (tempoAtual - tempoInicioPergunta >= tempoLimite) {
+    if (!perguntaPulada) {
+      perguntaPulada = true;
+      lcd_1.clear();
+      lcd_1.setCursor(0, 0);
+      lcd_1.print("Tempo esgotado!");
+      lcd_1.setCursor(0, 1);
+      lcd_1.print("Pergunta pulada");
+      tone(buzzer, 400, 500); 
+      delay(2000);
+      perguntaAtual++;
+      if (perguntaAtual < 5) {
+        exibirPergunta(); 
+      } else {
+        exibirPerguntaFinal();
+      }
+    } else {
+      lcd_1.clear();
+      lcd_1.setCursor(0, 0);
+      lcd_1.print("Tempo esgotado!");
+      lcd_1.setCursor(0, 1);
+      lcd_1.print("Voce perdeu!");
+      delay(2000);
+      reiniciarJogo();
+    }
+  }
+}
 
 void respostaCorreta() {
   lcd_1.clear();
@@ -255,7 +336,7 @@ void respostaCorreta() {
 
   perguntaAtual++;
   if (perguntaAtual < 5) {
-    exibirPergunta(); // Próxima pergunta aleatória
+    exibirPergunta(); 
   } else {
     exibirPerguntaFinal(); 
   }
@@ -274,10 +355,11 @@ void exibirPerguntaFinal() {
   lcd_1.clear();
   lcd_1.setCursor(0, 0);
   lcd_1.print("Pergunta Final:");
-  lcd_1.setCursor(0, 1);
-  lcd_1.print("CR7 maior atleta da história?");
   
-  String perguntaFinal = "CR7 maior atleta da história?";
+  // Escolhe uma pergunta final aleatória
+  int perguntaFinalSelecionada = random(0, qtdePerguntasFinais);
+  String perguntaFinal = perguntasFinais[perguntaFinalSelecionada];
+
   int maxScroll = perguntaFinal.length() - 15; 
   for (int i = 0; i <= maxScroll; i++) {
     lcd_1.setCursor(0, 1);
@@ -285,11 +367,11 @@ void exibirPerguntaFinal() {
     delay(500); 
   }
   
-  verificarRespostaPerguntaFinal();
+  verificarRespostaPerguntaFinal(perguntaFinalSelecionada);
 }
 
-void verificarRespostaPerguntaFinal() {
-  bool respostaFinalCorreta = true; 
+void verificarRespostaPerguntaFinal(int perguntaFinalSelecionada) {
+  bool respostaFinalCorreta = respostasFinais[perguntaFinalSelecionada]; // Pega a resposta correta
   while (true) {
     if (digitalRead(botao1) == LOW) { 
       delay(200); 
@@ -299,7 +381,7 @@ void verificarRespostaPerguntaFinal() {
         perdeuJogo();
       }
       break;
-    } else if (digitalRead(botao2) == LOW) {
+    } else if (digitalRead(botao2) == LOW) { 
       delay(200);
       if (!respostaFinalCorreta) {
         venceuJogo();
@@ -333,26 +415,15 @@ void perdeuJogo() {
 }
 
 void reiniciarJogo() {
+  // Reseta todos os estados do jogo e volta à tela inicial
   jogoMemoria = false;
   fasePerguntas = false;
   perguntaAtual = 0;
-  mensagemInicial(); 
-}
+  posicaoAtual = 0;
+  jogoEncerrado = false;
+  iniciarMemoria = false;
 
-void encerrarJogo() {
-  jogoMemoria = false;
-  jogoEncerrado = true;
-  lcd_1.clear();
-  lcd_1.setCursor(0, 0);
-  lcd_1.print("Jogo Encerrado!");
-
-  for (int i = 0; i < 3; i++) {
-    tone(buzzer, 500, 200); 
-    delay(300);
-  }
-
-  delay(2000);
-  mensagemInicial(); 
+  mensagemInicial();
 }
 
 void mensagemInicial() {
@@ -362,3 +433,4 @@ void mensagemInicial() {
   lcd_1.setCursor(0, 1);
   lcd_1.print("Pressione inicia");
 }
+
