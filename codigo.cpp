@@ -7,7 +7,7 @@ const int led1 = 9;
 const int led2 = 10;
 const int botao1 = 3; // Botão para SIM (representa o LED1)
 const int botao2 = 8; // Botão para NAO (representa o LED2)
-const int botaoStart = 2; // Botão para Iniciar/Desistir, agora no pino 2
+const int botaoStart = 2; // Botão para Iniciar/Desistir
 
 // Buzzer
 const int buzzer = 13;
@@ -36,7 +36,6 @@ String perguntasFinais[qtdePerguntasFinais] = {
   "Einstein > Tesla?" // NAO
 };
 bool respostasFinais[qtdePerguntasFinais] = {true, false, false};
-
 // Sequência do jogo
 int sequencia[10]; 
 int respostaJogador[10]; 
@@ -53,7 +52,7 @@ bool perguntaPulada = false;
 unsigned long tempoInicioPergunta = 0;
 const unsigned long tempoLimite = 10000; // Tempo limite para responder (10 segundos)
 bool tempoAcabando = false;
-volatile bool iniciarMemoria = false; // Variável para iniciar o jogo da memória
+bool iniciarMemoria = false; // Variável para iniciar o jogo da memória
 
 void setup() {
   pinMode(led1, OUTPUT);
@@ -67,53 +66,49 @@ void setup() {
   mensagemInicial();
 
   randomSeed(analogRead(0));
-  
-  attachInterrupt(digitalPinToInterrupt(botaoStart), startButtonISR, FALLING);
 }
 
 void loop() {
-  if (iniciarMemoria && !jogoEncerrado) {
-    iniciarMemoria = false;
+  // Verifica se o botão start foi pressionado para iniciar ou encerrar o jogo
+  if (digitalRead(botaoStart) == LOW && !jogoMemoria && !jogoEncerrado) {
+    delay(200); // Pequeno debounce
     iniciarJogo();
+  } else if (digitalRead(botaoStart) == LOW && jogoMemoria) {
+    delay(200); // Pequeno debounce
+    encerrarJogo();
   }
 
   if (jogoMemoria && !jogoEncerrado) {
     if (!fasePerguntas) {
       verificarEntradaJogador(); 
     } else {
-      verificarTempoPergunta(); 
-      verificarRespostaPergunta();
+      verificarTempoPergunta(); // Verificar o tempo restante para responder
+      verificarRespostaPergunta(); // Verificar se o jogador respondeu
     }
   }
 }
 
-void startButtonISR() {
-  if (!jogoMemoria && !jogoEncerrado) {
-    iniciarMemoria = true; 
-  } else if (jogoMemoria) {
-    encerrarJogoISR();
-  }
-}
-
-
-void encerrarJogoISR() {
+void encerrarJogo() {
   jogoEncerrado = true;
+  
   lcd_1.clear();
   lcd_1.setCursor(0, 0);
   lcd_1.print("Jogo Encerrado!");
 
-  
+  // Desligar os LEDs imediatamente ao encerrar
   digitalWrite(led1, LOW);
   digitalWrite(led2, LOW);
 
+  // Tocar um som de encerramento
   for (int i = 0; i < 3; i++) {
-    tone(buzzer, 500, 200); 
+    tone(buzzer, 500, 200); // Som de encerramento
     delay(300);
   }
 
-  delay(2000);
-  reiniciarJogo(); // 
+  delay(1000);
+  reiniciarJogo(); // Volta para a tela inicial e reinicia o estado do jogo
 }
+
 void iniciarJogo() {
   jogoMemoria = true;
   posicaoAtual = 0;
@@ -195,26 +190,19 @@ void mostrarTentativa(int ledIndicado) {
     lcd_1.setCursor(0, 1);
     lcd_1.print("Errado!");
     delay(1000);
-    encerrarJogoISR();
+    encerrarJogo();
   }
   delay(500);
 }
 
+void registrarResposta() {
+  delay(200); 
+  posicaoAtual++;
+  if (posicaoAtual == 10) {
+    verificarSequencia();
+  }
+}
 
-void registrarResposta() {
-  delay(200); 
-  posicaoAtual++;
-  if (posicaoAtual == 10) {
-    verificarSequencia();
-  }
-}
-void registrarResposta() {
-  delay(200); 
-  posicaoAtual++;
-  if (posicaoAtual == 10) {
-    verificarSequencia();
-  }
-}
 void verificarSequencia() {
   bool acertou = true;
   for (int i = 0; i < 10; i++) {
@@ -250,6 +238,7 @@ void verificarSequencia() {
     }
   }
 }
+
 void iniciarPerguntas() {
   fasePerguntas = true;
   perguntaAtual = 0;
@@ -260,28 +249,79 @@ void exibirPergunta() {
   lcd_1.clear();
   lcd_1.setCursor(0, 0);
   lcd_1.print("Pergunta:");
+  
+  String pergunta = perguntas[perguntasSelecionadas[perguntaAtual]]; // Seleciona a pergunta atual
+  
   lcd_1.setCursor(0, 1);
-  String pergunta = perguntas[perguntasSelecionadas[perguntaAtual]];
+  lcd_1.print(pergunta);
 
-  int maxScroll = pergunta.length() - 15; // Calcular quanto deslocamento é necessário
-  for (int i = 0; i <= maxScroll; i++) {
-    lcd_1.setCursor(0, 1);
-    lcd_1.print(pergunta.substring(i, i + 16)); // Mostra parte da pergunta
-    delay(500); 
+  if (pergunta.length() > 16) {
+    delay(1000);
+    for (int i = 0; i < pergunta.length() - 16; i++) {
+      lcd_1.scrollDisplayLeft();
+      delay(400);
+    }
   }
-  tempoInicioPergunta = millis(); 
+
+  delay(5000); // Pergunta ficará visível por 5 segundos
+
+  tempoInicioPergunta = millis(); // Inicia o cronômetro para a resposta
   tempoAcabando = false;
+
+  bool respondeu = false;
+
+  // Loop para contar o tempo e permitir resposta
+  while ((millis() - tempoInicioPergunta) < tempoLimite && !respondeu) {
+    int tempoRestante = (tempoLimite - (millis() - tempoInicioPergunta)) / 1000; // Calcula o tempo restante
+
+    lcd_1.clear();
+    lcd_1.setCursor(0, 0);
+    lcd_1.print("Tempo: ");
+    lcd_1.print(tempoRestante); 
+    lcd_1.setCursor(0, 1);
+    lcd_1.print("Sim ou Nao");
+
+    // Verifica se o jogador pressionou o botão "Sim" ou "Não"
+    if (digitalRead(botao1) == LOW) { 
+      delay(200); 
+      if (respostas[perguntasSelecionadas[perguntaAtual]]) {
+        respostaCorreta();
+      } else {
+        respostaIncorreta();
+      }
+      respondeu = true; 
+    } else if (digitalRead(botao2) == LOW) {
+      delay(200); 
+      if (!respostas[perguntasSelecionadas[perguntaAtual]]) {
+        respostaCorreta();
+      } else {
+        respostaIncorreta();
+      }
+      respondeu = true; 
+    }
+
+    if (tempoRestante <= 3 && !tempoAcabando) {
+      tone(buzzer, 1000, 200); 
+      tempoAcabando = true;
+    }
+
+    delay(1000);
+  }
+
+  if (!respondeu) {
+    verificarTempoPergunta();
+  }
 }
 
 void verificarRespostaPergunta() {
-  if (digitalRead(botao1) == LOW) { 
+  if (digitalRead(botao1) == LOW) { // Jogador escolhe SIM
     delay(200); 
     if (respostas[perguntasSelecionadas[perguntaAtual]]) {
       respostaCorreta();
     } else {
       respostaIncorreta();
     }
-  } else if (digitalRead(botao2) == LOW) { 
+  } else if (digitalRead(botao2) == LOW) { // Jogador escolhe NAO
     delay(200); 
     if (!respostas[perguntasSelecionadas[perguntaAtual]]) {
       respostaCorreta();
@@ -290,14 +330,10 @@ void verificarRespostaPergunta() {
     }
   }
 }
+
 void verificarTempoPergunta() {
   unsigned long tempoAtual = millis();
   unsigned long tempoRestante = tempoLimite - (tempoAtual - tempoInicioPergunta);
-
-  if (tempoRestante <= 3000 && !tempoAcabando) {
-    tone(buzzer, 1000, 200); 
-    tempoAcabando = true; 
-  }
 
   if (tempoAtual - tempoInicioPergunta >= tempoLimite) {
     if (!perguntaPulada) {
@@ -321,6 +357,7 @@ void verificarTempoPergunta() {
       lcd_1.print("Tempo esgotado!");
       lcd_1.setCursor(0, 1);
       lcd_1.print("Voce perdeu!");
+      tone(buzzer, 400, 500);
       delay(2000);
       reiniciarJogo();
     }
@@ -331,7 +368,7 @@ void respostaCorreta() {
   lcd_1.clear();
   lcd_1.setCursor(0, 0);
   lcd_1.print("Correto!");
-  tone(buzzer, 1000, 200); 
+  tone(buzzer, 1000, 200);
   delay(1000);
 
   perguntaAtual++;
@@ -398,7 +435,7 @@ void venceuJogo() {
   lcd_1.setCursor(0, 0);
   lcd_1.print("Parabens! Venceu!");
   for (int i = 0; i < 3; i++) {
-    tone(buzzer, 1000, 300); 
+    tone(buzzer, 1000, 300);
     delay(300);
   }
   delay(2000);
@@ -409,7 +446,7 @@ void perdeuJogo() {
   lcd_1.clear();
   lcd_1.setCursor(0, 0);
   lcd_1.print("Voce Perdeu!");
-  tone(buzzer, 400, 500); 
+  tone(buzzer, 400, 500);
   delay(2000);
   reiniciarJogo();
 }
@@ -433,4 +470,3 @@ void mensagemInicial() {
   lcd_1.setCursor(0, 1);
   lcd_1.print("Pressione inicia");
 }
-
