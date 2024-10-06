@@ -41,3 +41,10 @@ Fase de perguntas:
 
 3. Experimentos
 ![image](https://github.com/user-attachments/assets/2b154474-d863-4df9-a653-b0bca4361e69)
+
+4. Conclusão
+
+A solução que encontramos para resolver o projeto foi a partir de criações de arrays para armazenar tanto a sequência do jogo da memória, quanto as perguntas da segunda fase.
+Com isso, o código era capaz de receber os dados fornecidos pelas arrays e fazer as verificações necessárias, como verificar se a sequência de leds está correta e se a pergunta foi respondida corretamente.
+Apesar disso, encontramos uma grande dificuldade no processo, que foi o uso da interrupção no botão de start para acabar o jogo, pelo fato da nossa falta de familiaridade com o uso da lógica de interrupção no código. 
+Embora tenhamos tido essa dificuldade, de resto, o projeto atende a todos os outros requisitos.
