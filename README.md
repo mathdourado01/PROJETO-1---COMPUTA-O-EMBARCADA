@@ -41,6 +41,7 @@ Fase de perguntas:
 
 3. Experimentos
 ![image](https://github.com/user-attachments/assets/2b154474-d863-4df9-a653-b0bca4361e69)
+link do video de explicação: https://youtu.be/iYNqBd8dDss
 
 4. Conclusão
 
